@@ -10,6 +10,137 @@ from logger import get_logger
 logger = get_logger("verify_word")
 
 
+def check_duplicate_processes_in_modules(excel_path):
+    """
+    检查 Excel 中同一三级模块下是否存在同名功能过程
+    如果存在，返回 (False, 错误信息列表)
+    如果不存在，返回 (True, [])
+    """
+    df = read_excel_robust(excel_path)
+    if df is None:
+        return False, ["无法读取 Excel 文件"]
+    
+    # 列映射
+    col_map = {}
+    required_cols = {
+        'CustomerReq': ['客户需求'],
+        'Level1': ['一级模块'],
+        'Level2': ['二级模块'],
+        'Level3': ['三级模块'],
+        'Process': ['功能过程', '功能名称'],
+    }
+    
+    for col_idx, col_name in enumerate(df.columns):
+        col_str = str(col_name).strip()
+        for key, keywords in required_cols.items():
+            if key not in col_map and any(kw in col_str for kw in keywords):
+                col_map[key] = col_name
+    
+    # 回退索引
+    if 'CustomerReq' not in col_map and len(df.columns) > 0:
+        col_map['CustomerReq'] = df.columns[0]
+    if 'Level1' not in col_map and len(df.columns) > 1:
+        col_map['Level1'] = df.columns[1]
+    if 'Level2' not in col_map and len(df.columns) > 2:
+        col_map['Level2'] = df.columns[2]
+    if 'Level3' not in col_map and len(df.columns) > 3:
+        col_map['Level3'] = df.columns[3]
+    if 'Process' not in col_map and len(df.columns) > 6:
+        col_map['Process'] = df.columns[6]
+    
+    if 'Process' not in col_map:
+        return False, ["无法找到'功能过程'列"]
+    
+    customer_col = col_map.get('CustomerReq')
+    l1_col = col_map.get('Level1')
+    l2_col = col_map.get('Level2')
+    l3_col = col_map.get('Level3')
+    process_col = col_map['Process']
+    
+    # 清理无效关键字
+    invalid_keywords = ['呈现', '查询', '保存', '输入', '校验', '输出']
+    df.loc[df[process_col].isin(invalid_keywords), process_col] = None
+    
+    # 向下填充
+    cols_to_fill = []
+    if customer_col: cols_to_fill.append(customer_col)
+    if l1_col: cols_to_fill.append(l1_col)
+    if l2_col: cols_to_fill.append(l2_col)
+    if l3_col: cols_to_fill.append(l3_col)
+    cols_to_fill.append(process_col)
+    df[cols_to_fill] = df[cols_to_fill].ffill()
+    
+    # 按模块分组检查
+    errors = []
+    group_cols = []
+    if customer_col: group_cols.append(customer_col)
+    if l1_col: group_cols.append(l1_col)
+    if l2_col: group_cols.append(l2_col)
+    if l3_col: group_cols.append(l3_col)
+    
+    if not group_cols:
+        return True, []  # 无法分组，跳过检查
+    
+    for group_key, group_df in df.groupby(group_cols, sort=False):
+        # 统计该模块下的功能过程（按首次出现顺序，去重）
+        seen_processes = set()
+        process_first_positions = {}  # 记录每个功能过程首次出现的位置
+        duplicate_found = {}  # 记录重复出现时的位置
+        
+        for idx, row in group_df.iterrows():
+            process_name = row[process_col]
+            if pd.isna(process_name):
+                continue
+            
+            process_str = str(process_name).strip()
+            if process_str in invalid_keywords:
+                continue
+            
+            if process_str not in seen_processes:
+                # 首次出现，记录
+                seen_processes.add(process_str)
+                process_first_positions[process_str] = idx
+            # 同一功能过程的后续行（对应多个子过程）是正常的，不记录为重复
+        
+        # 检查是否有真正的重复：功能过程在不同位置段落再次出现
+        # 这需要检查功能过程名称的"首次出现块"是否有多个
+        # 简化方法：统计每个功能过程的"起始行"（通过检测前一行是否是不同功能过程）
+        prev_process = None
+        process_start_positions = {}  # 记录每个功能过程的所有起始位置
+        
+        for idx, row in group_df.iterrows():
+            process_name = row[process_col]
+            if pd.isna(process_name):
+                prev_process = None
+                continue
+            
+            process_str = str(process_name).strip()
+            if process_str in invalid_keywords:
+                prev_process = None
+                continue
+            
+            # 如果当前功能过程与前一个不同，说明是新的起始位置
+            if process_str != prev_process:
+                if process_str not in process_start_positions:
+                    process_start_positions[process_str] = []
+                process_start_positions[process_str].append(idx)
+                prev_process = process_str
+            # 否则是连续的子过程行，不记录
+        
+        # 检查是否有功能过程在多个位置段落出现（真正的重复）
+        for process_str, start_positions in process_start_positions.items():
+            if len(start_positions) > 1:
+                # 发现重复
+                module_info = f"{group_key}" if isinstance(group_key, str) else " > ".join([str(k) for k in group_key])
+                positions_str = ", ".join([f"行{pos}" for pos in start_positions])
+                error_msg = f"三级模块 [{module_info}] 中存在重复功能过程: '{process_str}' (出现在: {positions_str})"
+                errors.append(error_msg)
+    
+    if errors:
+        return False, errors
+    return True, []
+
+
 def read_excel_robust(excel_path):
     """
     自动查找正确的Sheet和表头
@@ -366,7 +497,42 @@ def verify_consistency(excel_path, word_path):
     logger.info("Word 文档内容验证")
     logger.info("=" * 80)
     
-    # 提取 Excel 数据
+    # 【新增】首先检查是否存在同一模块下的同名功能过程
+    print("步骤 1: 检查同一模块下是否存在重复功能过程名称...")
+    logger.info("步骤 1: 检查同一模块下是否存在重复功能过程名称...")
+    
+    is_valid, errors = check_duplicate_processes_in_modules(excel_path)
+    
+    if not is_valid:
+        print()
+        print("=" * 80)
+        print("✗ 验证失败！发现同一模块下存在重复的功能过程名称")
+        print("=" * 80)
+        logger.error("✗ 验证失败！发现同一模块下存在重复的功能过程名称")
+        
+        for i, error in enumerate(errors, 1):
+            print(f"\n错误 {i}: {error}")
+            logger.error(f"错误 {i}: {error}")
+        
+        print()
+        print("=" * 80)
+        print("说明: 同一三级模块下不允许存在同名功能过程。")
+        print("      这会导致 Word 文档生成时功能过程顺序错乱。")
+        print("      请修改 Excel 中的功能过程名称，确保同一模块下名称唯一。")
+        print("=" * 80)
+        logger.error("说明: 同一三级模块下不允许存在同名功能过程")
+        
+        # 返回失败，不进行后续验证
+        return False, []
+    
+    print("✓ 检查通过，无重复功能过程")
+    print()
+    logger.info("✓ 检查通过，无重复功能过程")
+    
+    # 【原有逻辑】提取 Excel 数据
+    print("步骤 2: 对比 Excel 与 Word 内容一致性...")
+    logger.info("步骤 2: 对比 Excel 与 Word 内容一致性...")
+    
     excel_processes, excel_details, _ = extract_excel_processes(excel_path)
     _, word_processes, word_level3_modules = extract_word_content(word_path)
     
