@@ -3,6 +3,7 @@ import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
 
 _BASE_DIR = Path(__file__).parent.resolve()
 _LOG_DIR = _BASE_DIR / "logs"
@@ -42,7 +43,7 @@ def _ensure_configured() -> logging.Logger:
     return logger
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
+def get_logger(name: Optional[str] = None) -> logging.Logger:
     """Get a child logger under the app logger namespace.
 
     Example: get_logger("excel_to_word_converter") -> logger named

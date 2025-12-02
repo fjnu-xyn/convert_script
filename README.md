@@ -23,10 +23,12 @@ chmod +x run_linux.sh
 
 #### 方式二：后台服务
 
+该命令需要cd 进入converter文件夹
 ```bash
 # 安装为 systemd 服务（需 root 权限）
-sudo ./run_linux.sh install
+sudo bash ./run_linux.sh install
 
+在启动systemd服务后，后续更新用下列命令管理即可
 # 服务管理命令
 sudo systemctl status converter    # 查看状态
 sudo systemctl stop converter       # 停止服务
@@ -49,7 +51,7 @@ sudo systemctl disable converter    # 禁用开机自启
 
 ## 四、配置说明
 
-### 1、日志配置（目前未更新到linux服务器上）
+### 1、日志配置
 
 - **默认等级**：`INFO`
 - **日志文件**：`logs/app.log`（最大 2MB，保留 3 个备份）
