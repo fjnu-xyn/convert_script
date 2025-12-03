@@ -217,7 +217,7 @@ def main():
             export_df = pd.DataFrame(st.session_state.module_stats)
             
             # 确保列顺序，使导出更直观
-            cols_order = ['一级模块名称', '二级模块名称', '三级模块名称', '功能过程名称', '子过程数量', '子过程详情']
+            cols_order = ['一级模块名称', '二级模块名称', '三级模块名称', '功能过程名称', '子过程数量', 'CFP总和', '子过程详情']
             # 仅保留存在的列
             final_cols = [c for c in cols_order if c in export_df.columns]
             export_df = export_df[final_cols]
@@ -251,7 +251,11 @@ def main():
                     
                     if agg_cols:
                         # sort=False 保持原始出现顺序
-                        detailed_df = export_df.groupby(agg_cols, as_index=False, sort=False)['子过程数量'].sum()
+                        # 聚合：子过程数量求和；CFP总和取首个（已按模块计算）
+                        detailed_df = export_df.groupby(agg_cols, sort=False).agg({
+                            '子过程数量': 'sum',
+                            'CFP总和': 'first'
+                        }).reset_index()
                     else:
                         detailed_df = export_df
                 else:
