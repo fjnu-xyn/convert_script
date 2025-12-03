@@ -54,7 +54,7 @@ sudo systemctl disable converter    # 禁用开机自启
 ### 1、日志配置
 
 - **默认等级**：`INFO`
-- **日志文件**：`logs/app.log`（最大 2MB，保留 3 个备份）
+- **日志文件**：`logs/app.log`（最大 2MB，保留 3 个备份：app.log:最新,app.log.1:最近日志......超过日志数量时最旧的会自动删除）
 - **调整等级**：设置环境变量 `LOG_LEVEL`
   - Windows: `set LOG_LEVEL=DEBUG`
   - Linux: `export LOG_LEVEL=DEBUG` 或 `LOG_LEVEL=DEBUG ./run_linux.sh`

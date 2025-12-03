@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 import time
 import atexit
 import threading
-import pandas as pd  # 新增：用于导出统计到 Excel
+import pandas as pd  
 
 # 导入转换脚本
 # 确保当前目录在 sys.path 中
@@ -84,8 +84,9 @@ def main():
         1. 将 Excel 文件拖入右侧上传区域或直接上传文件。
         2. 点击 **开始转换** 按钮生成 Word 文档。
         3. 转换完成后，需点击 **执行内容校对** 检查一致性。
-        4. 点击**下载 Word 文档**按钮下载转换后的 Word 文件。
+        4. 点击**下载 Word 文档**下载转换后的文件。
         5. 校对后右侧会出现模块统计信息，可导出为 Excel 文件（注：**详细数据**在excel中的第二个sheet）。
+        6. 校验出现问题时可以查看下方**日志**，如果日志报错但未找到错误原因，请自行排查excel文件内容及格式。
         """)
     
     # 主内容区和右侧边栏布局
